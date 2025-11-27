@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -43,13 +44,18 @@ export async function registerRoutes(
       .min(3)
       .max(30)
       .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string().min(8),
     firstName: z.string().max(50).optional(),
     lastName: z.string().max(50).optional(),
+  }).refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
   });
 
   app.post("/api/auth/signup", async (req, res) => {
     try {
-      const { email, username, firstName, lastName } = signupSchema.parse(req.body);
+      const { email, username, password, firstName, lastName } = signupSchema.parse(req.body);
 
       const existingEmail = await storage.getUserByEmail(email);
       if (existingEmail) {
@@ -60,9 +66,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Username is already taken" });
       }
 
-      const user = await storage.upsertUser({
+      const passwordHash = await bcrypt.hash(password, 12);
+      const user = await storage.createUser({
         email,
         username,
+        passwordHash,
         firstName,
         lastName,
       });
@@ -80,18 +88,24 @@ export async function registerRoutes(
 
   const loginSchema = z.object({
     identifier: z.string().min(3).max(100),
+    password: z.string().min(8),
   });
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { identifier } = loginSchema.parse(req.body);
+      const { identifier, password } = loginSchema.parse(req.body);
       const lookupByEmail = identifier.includes("@");
       const user = lookupByEmail
         ? await storage.getUserByEmail(identifier)
         : await storage.getUserByUsername(identifier);
 
-      if (!user) {
+      if (!user || !user.passwordHash) {
         return res.status(404).json({ message: "Account not found. Please sign up first." });
+      }
+
+      const isValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid credentials" });
       }
 
       req.session.user = serializeSessionUser(user);

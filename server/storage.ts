@@ -6,6 +6,7 @@ import {
   comments,
   type User,
   type UpsertUser,
+  type InsertUser,
   type Post,
   type InsertPost,
   type Follow,
@@ -26,6 +27,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  createUser(user: InsertUser & { passwordHash: string }): Promise<User>;
   updateUser(id: string, data: Partial<UpsertUser>): Promise<User | undefined>;
   getSuggestedUsers(currentUserId: string, limit?: number): Promise<User[]>;
   searchUsers(
@@ -94,6 +96,14 @@ export class DatabaseStorage implements IStorage {
           updatedAt: new Date(),
         },
       })
+      .returning();
+    return user;
+  }
+
+  async createUser(userData: InsertUser & { passwordHash: string }): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values({ ...userData, updatedAt: new Date() })
       .returning();
     return user;
   }

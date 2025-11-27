@@ -12,13 +12,18 @@ export default function Login() {
   const [, navigate] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
   const { toast } = useToast();
-  const [form, setForm] = useState({
+  const [signupForm, setSignupForm] = useState({
     email: "",
     username: "",
+    password: "",
+    confirmPassword: "",
     firstName: "",
     lastName: "",
   });
-  const [identifier, setIdentifier] = useState("");
+  const [signinForm, setSigninForm] = useState({
+    identifier: "",
+    password: "",
+  });
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +36,18 @@ export default function Login() {
 
   const handleSignupChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setSignupForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSigninChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setSigninForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const switchMode = (value: "signin" | "signup") => {
+    setMode(value);
+    setError(null);
+    setIsSubmitting(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,8 +58,8 @@ export default function Login() {
     try {
       const endpoint =
         mode === "signup"
-          ? { url: "/api/auth/signup", body: form }
-          : { url: "/api/auth/login", body: { identifier } };
+          ? { url: "/api/auth/signup", body: signupForm }
+          : { url: "/api/auth/login", body: signinForm };
 
       const res = await fetch(endpoint.url, {
         method: "POST",
@@ -62,7 +78,7 @@ export default function Login() {
       });
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to log in");
+      setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -85,14 +101,14 @@ export default function Login() {
             <CardTitle className="text-2xl">Sign in to continue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-3 pb-6">
+            <div className="grid grid-cols-2 gap-3 pb-6">
               {["signin", "signup"].map((value) => (
                 <Button
                   key={value}
                   type="button"
                   variant={mode === value ? "default" : "outline"}
                   className="flex-1"
-                  onClick={() => setMode(value as "signin" | "signup")}
+                  onClick={() => switchMode(value as "signin" | "signup")}
                 >
                   {value === "signin" ? "Sign in" : "Sign up"}
                 </Button>
@@ -106,10 +122,22 @@ export default function Login() {
                     id="identifier"
                     name="identifier"
                     placeholder="you@example.com or your_handle"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
+                    value={signinForm.identifier}
+                    onChange={handleSigninChange}
                     required
                   />
+                  <div className="space-y-2 pt-4">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      placeholder="Enter your password"
+                      value={signinForm.password}
+                      onChange={handleSigninChange}
+                      required
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="grid gap-4">
@@ -121,7 +149,7 @@ export default function Login() {
                       type="email"
                       autoComplete="email"
                       placeholder="you@example.com"
-                      value={form.email}
+                      value={signupForm.email}
                       onChange={handleSignupChange}
                       required
                     />
@@ -132,7 +160,7 @@ export default function Login() {
                       id="username"
                       name="username"
                       placeholder="your_handle"
-                      value={form.username}
+                      value={signupForm.username}
                       onChange={handleSignupChange}
                       required
                     />
@@ -140,13 +168,37 @@ export default function Login() {
                       Letters, numbers, and underscores only (3-30 characters).
                     </p>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Password</Label>
+                    <Input
+                      id="signup-password"
+                      name="password"
+                      type="password"
+                      placeholder="Create a strong password"
+                      value={signupForm.password}
+                      onChange={handleSignupChange}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirm password</Label>
+                    <Input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type="password"
+                      placeholder="Retype your password"
+                      value={signupForm.confirmPassword}
+                      onChange={handleSignupChange}
+                      required
+                    />
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">First name</Label>
                       <Input
                         id="firstName"
                         name="firstName"
-                        value={form.firstName}
+                        value={signupForm.firstName}
                         onChange={handleSignupChange}
                         placeholder="Jane"
                       />
@@ -156,7 +208,7 @@ export default function Login() {
                       <Input
                         id="lastName"
                         name="lastName"
-                        value={form.lastName}
+                        value={signupForm.lastName}
                         onChange={handleSignupChange}
                         placeholder="Doe"
                       />

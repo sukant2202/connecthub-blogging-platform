@@ -51,6 +51,12 @@ This document covers the workflow for:
    npm run deploy:prep  # check + bundle (same commands Render runs)
    ```
 
+> **Schema update note:** if you already have an existing database, add the password column once:
+> ```sql
+> ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash varchar;
+> ```
+> Local Docker users can run `psql postgres://userblog:changeme@localhost:5432/user_blog_portal -c "<above sql>"`.
+
 ---
 
 ## 3. Render deployment
@@ -79,10 +85,10 @@ You can either import the provided `render.yaml` blueprint or configure the serv
 3. Add environment variables in the service dashboard:
    | Key            | Value                                                       |
    |----------------|-------------------------------------------------------------|
-| `NODE_ENV`     | `production`                                                |
-| `PORT`         | leave empty (Render injects it automatically)               |
-| `DATABASE_URL` | database connection string                                  |
-| `SESSION_SECRET` | long random string                                        |
+   | `NODE_ENV`     | `production`                                                |
+   | `PORT`         | leave empty (Render injects it automatically)               |
+   | `DATABASE_URL` | database connection string                                  |
+   | `SESSION_SECRET` | long random string                                        |
 4. Click **Deploy**. Render will run `npm run deploy:prep` (type-check + bundle) followed by `npm run start` which serves both the API and the static client.
 
 ---

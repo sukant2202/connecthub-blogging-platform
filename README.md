@@ -8,7 +8,7 @@ Full-stack social platform built with React + TypeScript on the frontend and Exp
 
 - **Frontend**: React 18, Vite, Tailwind CSS, shadcn/ui, TanStack Query, Wouter
 - **Backend**: Node.js 20, Express, Drizzle ORM, PostgreSQL (locally via Docker; Render in production)
-- **Auth**: Simple session-based login (email + username)
+- **Auth**: Session-based email/username login + password hashing (bcrypt)
 - **Build**: Vite + esbuild bundling via `npm run deploy:prep`
 
 ## Getting started
@@ -30,13 +30,17 @@ Full-stack social platform built with React + TypeScript on the frontend and Exp
    cp env.example .env
    # edit .env with SESSION_SECRET, DATABASE_URL (defaults to local docker), PORT
    ```
+4. (If upgrading an existing DB) ensure the password column exists once:
+   ```bash
+   psql "$DATABASE_URL" -c 'ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash varchar;'
+   ```
 
-4. Run dev server
+5. Run dev server
    ```bash
    npm run dev          # Express API + Vite client on http://localhost:5000
    ```
 
-5. Tests/build
+6. Tests/build
    ```bash
    npm run check        # TypeScript check
    npm run deploy:prep  # same build Render runs (type-check + bundle)
