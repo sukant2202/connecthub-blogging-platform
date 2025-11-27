@@ -15,17 +15,24 @@ import {
   type PostWithAuthor,
   type CommentWithAuthor,
   type UserProfile,
+  type UserSearchResult,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, sql, ne, inArray } from "drizzle-orm";
+import { eq, desc, and, sql, ne, inArray, ilike, or } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (required for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUser(id: string, data: Partial<UpsertUser>): Promise<User | undefined>;
   getSuggestedUsers(currentUserId: string, limit?: number): Promise<User[]>;
+  searchUsers(
+    query: string,
+    currentUserId?: string,
+    limit?: number,
+  ): Promise<UserSearchResult[]>;
   
   // User profile
   getUserProfile(identifier: string, currentUserId?: string): Promise<UserProfile | undefined>;
@@ -68,6 +75,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
   }
 
@@ -114,6 +126,51 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(users.createdAt));
 
     return suggestedUsers;
+  }
+
+  async searchUsers(
+    query: string,
+    currentUserId?: string,
+    limit = 10,
+  ): Promise<UserSearchResult[]> {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    const wildcard = `%${trimmed}%`;
+    const nameMatch = or(
+      ilike(users.username, wildcard),
+      ilike(users.firstName, wildcard),
+      ilike(users.lastName, wildcard),
+    );
+    const whereClause = currentUserId
+      ? and(nameMatch, ne(users.id, currentUserId))
+      : nameMatch;
+    const safeLimit = Math.min(Math.max(limit ?? 10, 1), 25);
+
+    const rows = await db
+      .select({
+        user: users,
+        followersCount: sql<number>`(
+          SELECT count(*)::int FROM ${follows}
+          WHERE ${follows.followingId} = ${users.id}
+        )`,
+      })
+      .from(users)
+      .where(whereClause)
+      .orderBy(desc(users.createdAt))
+      .limit(safeLimit);
+
+    return Promise.all(
+      rows.map(async ({ user, followersCount }) => ({
+        ...user,
+        followersCount: followersCount ?? 0,
+        isFollowing: currentUserId
+          ? await this.isFollowing(currentUserId, user.id)
+          : false,
+      })),
+    );
   }
 
   async getUserProfile(identifier: string, currentUserId?: string): Promise<UserProfile | undefined> {

@@ -203,3 +203,8 @@ export type UserProfile = User & {
   postsCount: number;
   isFollowing: boolean;
 };
+
+export type UserSearchResult = User & {
+  followersCount: number;
+  isFollowing: boolean;
+};

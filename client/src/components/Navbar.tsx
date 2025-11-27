@@ -33,6 +33,16 @@ export function Navbar({ user }: NavbarProps) {
     ? `${user.firstName} ${user.lastName}`
     : user.username || "User";
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (error) {
+      console.error("Failed to log out", error);
+    } finally {
+      window.location.href = "/";
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
@@ -90,11 +100,9 @@ export function Navbar({ user }: NavbarProps) {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <a href="/api/logout" className="text-destructive focus:text-destructive" data-testid="button-logout">
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Log out
-                  </a>
+                <DropdownMenuItem onSelect={handleLogout} className="text-destructive focus:text-destructive" data-testid="button-logout">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -144,12 +152,14 @@ export function Navbar({ user }: NavbarProps) {
                 </nav>
                 
                 <div className="mt-auto pt-4 border-t">
-                  <a href="/api/logout">
-                    <Button variant="ghost" className="w-full justify-start gap-3 text-destructive hover:text-destructive">
-                      <LogOut className="h-5 w-5" />
-                      Log out
-                    </Button>
-                  </a>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 text-destructive hover:text-destructive"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-5 w-5" />
+                    Log out
+                  </Button>
                 </div>
               </div>
             </SheetContent>

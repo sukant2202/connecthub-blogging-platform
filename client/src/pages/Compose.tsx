@@ -20,7 +20,7 @@ export default function Compose() {
         variant: "destructive",
       });
       setTimeout(() => {
-        window.location.href = "/api/login";
+        setLocation("/login");
       }, 500);
     }
   }, [isAuthenticated, isLoading, toast]);

@@ -12,6 +12,7 @@ import Explore from "@/pages/Explore";
 import Profile from "@/pages/Profile";
 import PostDetails from "@/pages/PostDetails";
 import Compose from "@/pages/Compose";
+import Login from "@/pages/Login";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/u/:username" component={Profile} />
       <Route path="/post/:id" component={PostDetails} />
       <Route path="/compose" component={Compose} />
+      <Route path="/login" component={Login} />
       <Route component={NotFound} />
     </Switch>
   );

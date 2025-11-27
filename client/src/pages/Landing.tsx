@@ -2,18 +2,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Users, MessageCircle, Heart, Sparkles, ArrowRight } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Landing() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <span className="text-xl font-bold text-primary">ConnectHub</span>
+          <Link href="/">
+            <span className="text-xl font-bold text-primary cursor-pointer">ConnectHub</span>
+          </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <a href="/api/login">
+            <Link href="/login">
               <Button data-testid="button-login">Log in</Button>
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -39,17 +42,17 @@ export default function Landing() {
               </p>
               
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <a href="/api/login">
+                <Link href="/login">
                   <Button size="lg" className="gap-2 px-8" data-testid="button-get-started">
                     Get Started
                     <ArrowRight className="h-4 w-4" />
                   </Button>
-                </a>
-                <a href="/explore">
+                </Link>
+                <Link href="/explore">
                   <Button variant="outline" size="lg" className="gap-2 px-8" data-testid="button-explore">
                     Explore Posts
                   </Button>
-                </a>
+                </Link>
               </div>
             </div>
           </div>
@@ -106,12 +109,12 @@ export default function Landing() {
             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
               Create your account in seconds and start connecting with amazing people today.
             </p>
-            <a href="/api/login">
+            <Link href="/login">
               <Button size="lg" className="gap-2 px-8">
                 Create Account
                 <ArrowRight className="h-4 w-4" />
               </Button>
-            </a>
+            </Link>
           </div>
         </section>
       </main>

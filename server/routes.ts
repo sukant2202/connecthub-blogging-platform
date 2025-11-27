@@ -1,7 +1,7 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated } from "./auth";
 import { z } from "zod";
 
 export async function registerRoutes(
@@ -12,10 +12,15 @@ export async function registerRoutes(
   await setupAuth(app);
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  const getSessionUser = (req: Request) => req.session?.user;
+
+  app.get("/api/auth/user", async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const sessionUser = getSessionUser(req);
+      if (!sessionUser) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const user = await storage.getUser(sessionUser.id);
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -23,10 +28,93 @@ export async function registerRoutes(
     }
   });
 
-  // User routes
-  app.get('/api/users/suggested', isAuthenticated, async (req: any, res) => {
+  app.post("/api/auth/login", async (req, res) => {
+    const schema = z.object({
+      email: z.string().email(),
+      username: z
+        .string()
+        .min(3)
+        .max(30)
+        .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores")
+        .optional(),
+      firstName: z.string().max(50).optional(),
+      lastName: z.string().max(50).optional(),
+    });
+
     try {
-      const userId = req.user.claims.sub;
+      const { email, username, firstName, lastName } = schema.parse(req.body);
+
+      let user = await storage.getUserByEmail(email);
+
+      if (!user) {
+        if (username) {
+          const usernameOwner = await storage.getUserByUsername(username);
+          if (usernameOwner) {
+            return res.status(400).json({ message: "Username is already taken" });
+          }
+        }
+
+        user = await storage.upsertUser({
+          email,
+          username,
+          firstName,
+          lastName,
+        });
+      } else {
+        const updates: Record<string, string | null | undefined> = {};
+
+        if (username && user.username !== username) {
+          const usernameOwner = await storage.getUserByUsername(username);
+          if (usernameOwner && usernameOwner.id !== user.id) {
+            return res.status(400).json({ message: "Username is already taken" });
+          }
+          updates.username = username;
+        }
+
+        if (firstName !== undefined && user.firstName !== firstName) updates.firstName = firstName;
+        if (lastName !== undefined && user.lastName !== lastName) updates.lastName = lastName;
+
+        if (Object.keys(updates).length > 0) {
+          user = (await storage.updateUser(user.id, updates)) ?? user;
+        }
+      }
+
+      req.session.user = {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+      };
+
+      res.json(user);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Error logging in:", error);
+      res.status(500).json({ message: "Failed to log in" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    if (!req.session) {
+      return res.json({ message: "Logged out" });
+    }
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Error destroying session:", err);
+        return res.status(500).json({ message: "Failed to log out" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ message: "Logged out" });
+    });
+  });
+
+  // User routes
+  app.get('/api/users/suggested', isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.session!.user!.id;
       const users = await storage.getSuggestedUsers(userId, 5);
       res.json(users);
     } catch (error) {
@@ -35,10 +123,33 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/users/:identifier', async (req: any, res) => {
+  app.get("/api/users/search", async (req, res) => {
+    const schema = z.object({
+      query: z.string().trim().min(2).max(50),
+      limit: z.coerce.number().min(1).max(25).optional(),
+    });
+
+    try {
+      const { query, limit } = schema.parse({
+        query: (req.query.q ?? req.query.query ?? "") as string,
+        limit: req.query.limit,
+      });
+      const currentUserId = req.session?.user?.id;
+      const users = await storage.searchUsers(query, currentUserId, limit);
+      res.json(users);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Error searching users:", error);
+      res.status(500).json({ message: "Failed to search users" });
+    }
+  });
+
+  app.get('/api/users/:identifier', async (req, res) => {
     try {
       const { identifier } = req.params;
-      const currentUserId = req.user?.claims?.sub;
+      const currentUserId = req.session?.user?.id;
       const profile = await storage.getUserProfile(identifier, currentUserId);
       
       if (!profile) {
@@ -52,10 +163,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/users/:identifier/posts', async (req: any, res) => {
+  app.get('/api/users/:identifier/posts', async (req, res) => {
     try {
       const { identifier } = req.params;
-      const currentUserId = req.user?.claims?.sub;
+      const currentUserId = req.session?.user?.id;
       
       // Find user by username or id
       let user = await storage.getUserByUsername(identifier);
@@ -75,9 +186,9 @@ export async function registerRoutes(
     }
   });
 
-  app.put('/api/users/me', isAuthenticated, async (req: any, res) => {
+  app.put('/api/users/me', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       
       const schema = z.object({
         username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores").optional(),
@@ -125,9 +236,9 @@ export async function registerRoutes(
   });
 
   // Follow routes
-  app.post('/api/users/:id/follow', isAuthenticated, async (req: any, res) => {
+  app.post('/api/users/:id/follow', isAuthenticated, async (req, res) => {
     try {
-      const followerId = req.user.claims.sub;
+      const followerId = req.session!.user!.id;
       const followingId = req.params.id;
       
       if (followerId === followingId) {
@@ -145,9 +256,9 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/users/:id/follow', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/users/:id/follow', isAuthenticated, async (req, res) => {
     try {
-      const followerId = req.user.claims.sub;
+      const followerId = req.session!.user!.id;
       const followingId = req.params.id;
       
       const success = await storage.unfollowUser(followerId, followingId);
@@ -163,9 +274,9 @@ export async function registerRoutes(
   });
 
   // Post routes
-  app.post('/api/posts', isAuthenticated, async (req: any, res) => {
+  app.post('/api/posts', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       const schema = z.object({
         content: z.string().min(1).max(500),
         imageUrl: z.string().url().nullable().optional(),
@@ -183,9 +294,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/posts', async (req: any, res) => {
+  app.get('/api/posts', async (req, res) => {
     try {
-      const currentUserId = req.user?.claims?.sub;
+      const currentUserId = req.session?.user?.id;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
       
@@ -197,9 +308,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/posts/feed', isAuthenticated, async (req: any, res) => {
+  app.get('/api/posts/feed', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
       
@@ -211,10 +322,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/posts/:id', async (req: any, res) => {
+  app.get('/api/posts/:id', async (req, res) => {
     try {
       const postId = parseInt(req.params.id);
-      const currentUserId = req.user?.claims?.sub;
+      const currentUserId = req.session?.user?.id;
       
       const post = await storage.getPost(postId, currentUserId);
       if (!post) {
@@ -228,9 +339,9 @@ export async function registerRoutes(
     }
   });
 
-  app.put('/api/posts/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/posts/:id', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       const postId = parseInt(req.params.id);
       const schema = z.object({
         content: z.string().min(1).max(500),
@@ -254,9 +365,9 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/posts/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/posts/:id', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       const postId = parseInt(req.params.id);
       
       const success = await storage.deletePost(postId, userId);
@@ -272,9 +383,9 @@ export async function registerRoutes(
   });
 
   // Like routes
-  app.post('/api/posts/:id/like', isAuthenticated, async (req: any, res) => {
+  app.post('/api/posts/:id/like', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       const postId = parseInt(req.params.id);
       
       const like = await storage.likePost(userId, postId);
@@ -288,9 +399,9 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/posts/:id/like', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/posts/:id/like', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       const postId = parseInt(req.params.id);
       
       const success = await storage.unlikePost(userId, postId);
@@ -306,9 +417,9 @@ export async function registerRoutes(
   });
 
   // Comment routes
-  app.post('/api/posts/:id/comments', isAuthenticated, async (req: any, res) => {
+  app.post('/api/posts/:id/comments', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       const postId = parseInt(req.params.id);
       const schema = z.object({
         content: z.string().min(1).max(500),
@@ -326,7 +437,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/posts/:id/comments', async (req: any, res) => {
+  app.get('/api/posts/:id/comments', async (req, res) => {
     try {
       const postId = parseInt(req.params.id);
       const comments = await storage.getComments(postId);
@@ -337,9 +448,9 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/comments/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/comments/:id', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.session!.user!.id;
       const commentId = parseInt(req.params.id);
       
       const success = await storage.deleteComment(commentId, userId);

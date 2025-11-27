@@ -41,6 +41,7 @@ export function FollowButton({ userId, isFollowing: serverIsFollowing, onFollowC
       queryClient.invalidateQueries({ queryKey: ["/api/users", userId] });
       queryClient.invalidateQueries({ queryKey: ["/api/posts/feed"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users/suggested"] });
+        queryClient.invalidateQueries({ queryKey: ["user-search"] });
     },
     onError: (error: Error, _, context) => {
       if (context) {
@@ -53,7 +54,7 @@ export function FollowButton({ userId, isFollowing: serverIsFollowing, onFollowC
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          window.location.href = "/login";
         }, 500);
         return;
       }
