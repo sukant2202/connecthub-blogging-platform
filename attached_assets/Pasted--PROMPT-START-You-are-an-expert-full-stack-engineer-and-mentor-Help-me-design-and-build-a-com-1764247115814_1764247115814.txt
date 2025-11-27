@@ -1,0 +1,381 @@
+[PROMPT START]
+
+You are an expert full-stack engineer and mentor. 
+Help me design and build a complete full-stack **social media web application** from scratch.
+
+I want this app to be suitable as a **job application project** and to clearly demonstrate strong skills in:
+
+- Frontend (modern UI)
+- Backend (REST APIs)
+- Database (schema design + queries)
+- Authentication & authorization
+- Clean architecture & code quality
+
+----------------------------------------------------
+1. PROJECT OVERVIEW
+----------------------------------------------------
+
+Project Name (working title): **ConnectHub – A Mini Social Media Platform**
+
+One-line description:
+> A full-stack social media web app where users can create posts, follow others, like and comment on posts, and view a personalized feed.
+
+Tech Stack (use these unless I explicitly change later):
+
+- **Frontend:** React, React Router, Axios (or Fetch), TailwindCSS (or CSS modules)
+- **Backend:** Node.js + Express
+- **Auth:** JWT (JSON Web Tokens)
+- **Database:** PostgreSQL (via an ORM like Prisma or Sequelize)
+- **API style:** REST
+
+If some small choices are missing, you may make reasonable assumptions and continue.
+
+----------------------------------------------------
+2. CORE FEATURES (MUST IMPLEMENT ALL)
+----------------------------------------------------
+
+Implement the following features:
+
+A. Authentication & Authorization
+- User registration (sign up) with:
+  - Username (unique)
+  - Email (unique)
+  - Password (hashed)
+- Login with email/username + password
+- JWT-based authentication
+- Protected routes on backend for authenticated actions
+- On the frontend:
+  - Persist auth state (e.g., in localStorage)
+  - Redirect to login if user is not authenticated
+
+B. User Profiles
+- Each user has:
+  - username
+  - email
+  - bio
+  - avatar_url (can be optional / placeholder)
+  - created_at
+- Features:
+  - View user profile page: `/u/:username`
+  - Show:
+    - basic info (username, bio, avatar)
+    - follower and following counts
+    - number of posts
+    - user’s posts list
+  - Edit profile (bio, avatar_url) for logged-in user
+
+C. Posts
+- Users can:
+  - Create a post with:
+    - text content
+    - optional image_url (string)
+  - Edit/delete ONLY their own posts
+  - View:
+    - Global feed: all posts (paginated)
+    - Personalized feed: posts from accounts they follow
+- Post data should have:
+  - id
+  - user_id
+  - content
+  - image_url (nullable)
+  - created_at
+  - updated_at
+
+D. Social Features
+1) Follow / Unfollow
+- A user can follow or unfollow another user
+- You must maintain:
+  - follower_id
+  - following_id
+  - created_at
+- Constraints:
+  - One pair (follower_id, following_id) should be unique
+
+2) Likes
+- A user can like or unlike a post
+- Store:
+  - user_id
+  - post_id
+  - created_at
+- Constraints:
+  - Unique (user_id, post_id) pair (no duplicate likes)
+
+3) Comments
+- A user can comment on a post
+- Comment contains:
+  - id
+  - user_id
+  - post_id
+  - content
+  - created_at
+- A user can delete their own comments
+
+E. Basic UI/UX Requirements
+- Responsive layout (looks good on mobile + desktop)
+- Core pages:
+  - `/login`
+  - `/register`
+  - `/` → home feed (if logged in)
+  - `/explore` → global feed
+  - `/u/:username` → profile page
+  - `/post/:id` → single post with comments
+  - `/compose` → create new post
+- Simple, clean styling (no need to be fancy, but should be neat)
+
+----------------------------------------------------
+3. DATABASE DESIGN
+----------------------------------------------------
+
+Design a relational schema in PostgreSQL with at least the following tables:
+
+1) users
+- id (PK)
+- username (unique)
+- email (unique)
+- password_hash
+- bio (nullable)
+- avatar_url (nullable)
+- created_at
+
+2) posts
+- id (PK)
+- user_id (FK → users.id)
+- content (text)
+- image_url (nullable)
+- created_at
+- updated_at
+
+3) follows
+- id (PK)
+- follower_id (FK → users.id)
+- following_id (FK → users.id)
+- created_at
+- UNIQUE(follower_id, following_id)
+
+4) likes
+- id (PK)
+- user_id (FK → users.id)
+- post_id (FK → posts.id)
+- created_at
+- UNIQUE(user_id, post_id)
+
+5) comments
+- id (PK)
+- user_id (FK → users.id)
+- post_id (FK → posts.id)
+- content (text)
+- created_at
+
+When designing models with ORM, reflect these relationships properly.
+
+----------------------------------------------------
+4. API DESIGN (BACKEND ROUTES)
+----------------------------------------------------
+
+Create a REST API with routes such as:
+
+AUTH
+- POST `/api/auth/register` – create a new user
+- POST `/api/auth/login` – login, return JWT + user info
+- GET `/api/auth/me` – get current logged-in user (requires JWT)
+
+USERS & PROFILE
+- GET `/api/users/:username` – get user profile + counts
+- PUT `/api/users/me` – update logged-in user's profile (bio, avatar_url)
+- GET `/api/users/:id/followers` – list followers
+- GET `/api/users/:id/following` – list following
+
+FOLLOW / UNFOLLOW
+- POST `/api/users/:id/follow` – follow user with id
+- DELETE `/api/users/:id/follow` – unfollow user with id
+
+POSTS
+- POST `/api/posts` – create a post (auth required)
+- GET `/api/posts` – global posts (with pagination)
+- GET `/api/posts/feed` – feed of posts from followed users (auth required)
+- GET `/api/posts/:id` – get single post (with counts)
+- PUT `/api/posts/:id` – edit own post
+- DELETE `/api/posts/:id` – delete own post
+
+LIKES
+- POST `/api/posts/:id/like` – like a post
+- DELETE `/api/posts/:id/like` – unlike a post
+- GET `/api/posts/:id/likes` – get list or count of likes
+
+COMMENTS
+- POST `/api/posts/:id/comments` – add comment
+- GET `/api/posts/:id/comments` – get all comments for a post
+- DELETE `/api/comments/:id` – delete own comment
+
+Add proper:
+- Validation (e.g., missing fields, invalid ids)
+- Error handling (404, 401, 403, 400)
+- Auth middleware to protect routes
+
+----------------------------------------------------
+5. FRONTEND PAGES AND COMPONENTS
+----------------------------------------------------
+
+Use React with React Router to build these pages:
+
+1) Auth Pages
+- `LoginPage`
+- `RegisterPage`
+
+2) Main Pages
+- `HomePage`:
+  - shows personalized feed (if logged in)
+  - each post card shows: author, time, content, likes, comments count, like/unlike button
+- `ExplorePage`:
+  - shows global posts (paginated)
+
+3) Profile Page
+- `ProfilePage` (`/u/:username`):
+  - show profile info
+  - follow/unfollow button
+  - list of that user’s posts
+  - if it’s the logged-in user, show "Edit Profile" option
+
+4) Post Details
+- `PostDetailsPage` (`/post/:id`):
+  - show single post
+  - show likes count
+  - comment section:
+    - list comments
+    - add new comment
+    - delete own comment
+
+5) Post Composer
+- `ComposePage` (`/compose`):
+  - create new post (text + optional image URL)
+
+Shared Components:
+- `Navbar` (shows links and user info)
+- `PostCard`
+- `CommentList` + `CommentItem`
+- `FollowButton`
+- `ProtectedRoute` wrapper (for routes that need auth)
+
+State Management:
+- You can use React Context or simple lifting state up (no need for Redux unless useful).
+- Manage:
+  - auth state (current user + token)
+  - basic loading/error states
+
+----------------------------------------------------
+6. PROJECT STRUCTURE
+----------------------------------------------------
+
+Suggest and use a clean folder structure.
+
+Example backend structure:
+
+- backend/
+  - src/
+    - index.js
+    - config/
+      - db.js
+    - middleware/
+      - authMiddleware.js
+      - errorHandler.js
+    - models/ (or prisma schema if using Prisma)
+    - controllers/
+      - authController.js
+      - userController.js
+      - postController.js
+      - followController.js
+      - likeController.js
+      - commentController.js
+    - routes/
+      - authRoutes.js
+      - userRoutes.js
+      - postRoutes.js
+      - followRoutes.js
+      - likeRoutes.js
+      - commentRoutes.js
+    - utils/
+      - generateToken.js
+
+Example frontend structure:
+
+- frontend/
+  - src/
+    - main.jsx or index.jsx
+    - App.jsx
+    - api/
+      - axiosClient.js
+    - pages/
+      - Login.jsx
+      - Register.jsx
+      - Home.jsx
+      - Explore.jsx
+      - Profile.jsx
+      - PostDetails.jsx
+      - Compose.jsx
+    - components/
+      - Navbar.jsx
+      - PostCard.jsx
+      - CommentList.jsx
+      - FollowButton.jsx
+    - context/ or hooks/
+      - AuthContext.jsx
+
+----------------------------------------------------
+7. HOW I WANT YOU (THE AI) TO WORK
+----------------------------------------------------
+
+I want you to build this project with me in **clear, structured phases**.
+
+Whenever I say "continue" or ask for the next part, follow these phases:
+
+Phase 1 – Architecture & Design
+- Summarize the project in your own words
+- Confirm tech stack
+- Present:
+  - final database schema
+  - API endpoint list
+  - frontend page/component plan
+  - folder structure
+
+Phase 2 – Backend Implementation
+- Step-by-step:
+  - Initialize Node.js + Express project
+  - Set up database connection and ORM
+  - Create models / ORM schemas
+  - Implement auth (register/login, JWT middleware)
+  - Implement each route group (auth, users, posts, follows, likes, comments)
+- For each step, provide:
+  - Clear explanation
+  - Code blocks for key files
+
+Phase 3 – Frontend Implementation (React)
+- Initialize React project
+- Set up routing (React Router)
+- Implement auth pages
+- Implement main pages (feed, explore, profile, post details, compose)
+- Set up API client (Axios)
+- Implement global auth state
+- Wire up frontend components to backend APIs
+
+Phase 4 – Integration, Testing & Improvements
+- Show how to:
+  - run both frontend and backend
+  - test core flows (register, login, follow, post, like, comment)
+- Suggest improvements and optional enhancements:
+  - better UI
+  - error toasts
+  - pagination / infinite scroll
+
+Phase 5 – README & Resume Description
+- Help me write:
+  - A professional README for GitHub
+  - A short project description to put on my resume
+
+VERY IMPORTANT:
+- Always give code in properly formatted blocks.
+- Keep explanations concise but clear.
+- If something is ambiguous, make a reasonable assumption and state it briefly.
+
+Start now with **Phase 1 – Architecture & Design**.
+
+[PROMPT END]
