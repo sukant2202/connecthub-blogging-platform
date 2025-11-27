@@ -23,30 +23,43 @@ export function FollowButton({ userId, isFollowing: serverIsFollowing, onFollowC
   }, [serverIsFollowing]);
 
   const followMutation = useMutation({
-    mutationFn: async () => {
-      if (isFollowing) {
-        await apiRequest("DELETE", `/api/users/${userId}/follow`);
-      } else {
-        await apiRequest("POST", `/api/users/${userId}/follow`);
+    mutationFn: async (currentFollowingState: boolean) => {
+      try {
+        if (currentFollowingState) {
+          const response = await apiRequest("DELETE", `/api/users/${userId}/follow`);
+          await response.json(); // Parse response to ensure it's valid
+        } else {
+          const response = await apiRequest("POST", `/api/users/${userId}/follow`);
+          await response.json(); // Parse response to ensure it's valid
+        }
+      } catch (error: any) {
+        console.error("Follow mutation error:", error);
+        // Extract meaningful error message
+        const errorMessage = error?.message || "Failed to update follow status";
+        throw new Error(errorMessage);
       }
     },
     onMutate: async () => {
       const newFollowState = !isFollowing;
       setIsFollowing(newFollowState);
-      return { previousState: isFollowing };
+      onFollowChange?.(newFollowState);
+      return { previousState: isFollowing, newState: newFollowState };
     },
     onSuccess: () => {
-      const newFollowState = isFollowing;
-      onFollowChange?.(newFollowState);
+      // State is already updated in onMutate, just invalidate queries
       queryClient.invalidateQueries({ queryKey: ["/api/users", userId] });
       queryClient.invalidateQueries({ queryKey: ["/api/posts/feed"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users/suggested"] });
-        queryClient.invalidateQueries({ queryKey: ["user-search"] });
+      queryClient.invalidateQueries({ queryKey: ["user-search"] });
     },
     onError: (error: Error, _, context) => {
+      console.error("Follow mutation onError:", error);
+      // Revert optimistic update
       if (context) {
         setIsFollowing(context.previousState);
+        onFollowChange?.(context.previousState);
       }
+      
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
@@ -58,16 +71,29 @@ export function FollowButton({ userId, isFollowing: serverIsFollowing, onFollowC
         }, 500);
         return;
       }
+      
+      // Extract error message from the error
+      let errorMessage = "Failed to update follow status";
+      if (error.message) {
+        // Error format is usually "STATUS: message"
+        const match = error.message.match(/^\d+:\s*(.+)$/);
+        if (match) {
+          errorMessage = match[1];
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to update follow status",
+        description: errorMessage,
         variant: "destructive",
       });
     },
   });
 
   const handleClick = () => {
-    followMutation.mutate();
+    followMutation.mutate(isFollowing);
   };
 
   if (followMutation.isPending) {

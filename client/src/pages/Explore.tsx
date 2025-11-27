@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navbar } from "@/components/Navbar";
 import { PostFeed } from "@/components/PostFeed";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import type { PostWithAuthor, UserSearchResult } from "@shared/schema";
 
 export default function Explore() {
   const { user, isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearch = useDebouncedValue(searchTerm.trim(), 400);
   const followersFormatter = useMemo(
@@ -180,7 +181,14 @@ export default function Explore() {
                         </div>
                       </Link>
                       {isAuthenticated && user && user.id !== result.id ? (
-                        <FollowButton userId={result.id} isFollowing={result.isFollowing} />
+                        <FollowButton 
+                          userId={result.id} 
+                          isFollowing={result.isFollowing}
+                          onFollowChange={() => {
+                            // Invalidate search query to refresh results
+                            queryClient.invalidateQueries({ queryKey: ["user-search"] });
+                          }}
+                        />
                       ) : null}
                     </div>
                   );

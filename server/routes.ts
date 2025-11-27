@@ -209,6 +209,74 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/users/:identifier/followers', async (req, res) => {
+    try {
+      const { identifier } = req.params;
+      const currentUserId = req.session?.user?.id;
+      
+      // Find user by username or id
+      let user = await storage.getUserByUsername(identifier);
+      if (!user) {
+        user = await storage.getUser(identifier);
+      }
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const followers = await storage.getFollowers(user.id);
+      
+      // Enrich with follow status for current user
+      const enrichedFollowers = await Promise.all(
+        followers.map(async (follower) => {
+          const isFollowing = currentUserId 
+            ? await storage.isFollowing(currentUserId, follower.id)
+            : false;
+          return { ...follower, isFollowing };
+        })
+      );
+      
+      res.json(enrichedFollowers);
+    } catch (error) {
+      console.error("Error fetching followers:", error);
+      res.status(500).json({ message: "Failed to fetch followers" });
+    }
+  });
+
+  app.get('/api/users/:identifier/following', async (req, res) => {
+    try {
+      const { identifier } = req.params;
+      const currentUserId = req.session?.user?.id;
+      
+      // Find user by username or id
+      let user = await storage.getUserByUsername(identifier);
+      if (!user) {
+        user = await storage.getUser(identifier);
+      }
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const following = await storage.getFollowing(user.id);
+      
+      // Enrich with follow status for current user
+      const enrichedFollowing = await Promise.all(
+        following.map(async (followedUser) => {
+          const isFollowing = currentUserId 
+            ? await storage.isFollowing(currentUserId, followedUser.id)
+            : false;
+          return { ...followedUser, isFollowing };
+        })
+      );
+      
+      res.json(enrichedFollowing);
+    } catch (error) {
+      console.error("Error fetching following:", error);
+      res.status(500).json({ message: "Failed to fetch following" });
+    }
+  });
+
   app.put('/api/users/me', isAuthenticated, async (req, res) => {
     try {
       const userId = req.session!.user!.id;
@@ -268,8 +336,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cannot follow yourself" });
       }
       
+      // Check if already following
+      const alreadyFollowing = await storage.isFollowing(followerId, followingId);
+      if (alreadyFollowing) {
+        return res.status(400).json({ message: "Already following this user" });
+      }
+      
       const follow = await storage.followUser(followerId, followingId);
-      res.json(follow);
+      res.json({ success: true, follow });
     } catch (error: any) {
       if (error.code === 11000) {
         return res.status(400).json({ message: "Already following this user" });
@@ -284,12 +358,16 @@ export async function registerRoutes(
       const followerId = req.session!.user!.id;
       const followingId = req.params.id;
       
+      if (followerId === followingId) {
+        return res.status(400).json({ message: "Cannot unfollow yourself" });
+      }
+      
       const success = await storage.unfollowUser(followerId, followingId);
       if (!success) {
         return res.status(404).json({ message: "Follow relationship not found" });
       }
       
-      res.json({ message: "Unfollowed successfully" });
+      res.json({ success: true, message: "Unfollowed successfully" });
     } catch (error) {
       console.error("Error unfollowing user:", error);
       res.status(500).json({ message: "Failed to unfollow user" });
@@ -297,18 +375,31 @@ export async function registerRoutes(
   });
 
   // Image upload route
-  app.post('/api/upload', isAuthenticated, upload.single('image'), (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
+  app.post('/api/upload', isAuthenticated, (req, res, next) => {
+    upload.single('image')(req, res, (err: any) => {
+      if (err) {
+        // Handle multer errors
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ message: "File too large. Maximum size is 5MB." });
+        }
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          return res.status(400).json({ message: "Unexpected file field. Use 'image' as the field name." });
+        }
+        return res.status(400).json({ message: err.message || "Failed to upload image" });
       }
-      const imageUrl = getUploadUrl(req.file.filename);
-      res.json({ imageUrl });
-    } catch (error: any) {
-      console.error("Error uploading image:", error);
-      const message = error.message || "Failed to upload image";
-      res.status(error.statusCode || 500).json({ message });
-    }
+      
+      try {
+        if (!req.file) {
+          return res.status(400).json({ message: "No file uploaded" });
+        }
+        const imageUrl = getUploadUrl(req.file.filename);
+        res.json({ imageUrl });
+      } catch (error: any) {
+        console.error("Error uploading image:", error);
+        const message = error.message || "Failed to upload image";
+        res.status(error.statusCode || 500).json({ message });
+      }
+    });
   });
 
   // Post routes
@@ -317,7 +408,11 @@ export async function registerRoutes(
       const userId = req.session!.user!.id;
       const schema = z.object({
         content: z.string().min(1).max(500),
-        imageUrl: z.string().url().nullable().optional(),
+        imageUrl: z.union([
+          z.string().url(),
+          z.string().startsWith("/uploads/"),
+          z.null(),
+        ]).optional(),
       });
       
       const { content, imageUrl } = schema.parse(req.body);
@@ -383,7 +478,11 @@ export async function registerRoutes(
       const postId = req.params.id;
       const schema = z.object({
         content: z.string().min(1).max(500),
-        imageUrl: z.string().url().nullable().optional(),
+        imageUrl: z.union([
+          z.string().url(),
+          z.string().startsWith("/uploads/"),
+          z.null(),
+        ]).optional(),
       });
       
       const { content, imageUrl } = schema.parse(req.body);

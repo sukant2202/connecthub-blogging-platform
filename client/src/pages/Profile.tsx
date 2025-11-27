@@ -5,6 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { PostFeed } from "@/components/PostFeed";
 import { UserAvatar } from "@/components/UserAvatar";
 import { FollowButton } from "@/components/FollowButton";
+import { FollowersFollowingDialog } from "@/components/FollowersFollowingDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +35,8 @@ export default function Profile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [followersDialogOpen, setFollowersDialogOpen] = useState(false);
+  const [followingDialogOpen, setFollowingDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     username: "",
     bio: "",
@@ -237,7 +240,13 @@ export default function Profile() {
                 ) : currentUser && (
                   <FollowButton 
                     userId={profile.id} 
-                    isFollowing={profile.isFollowing} 
+                    isFollowing={profile.isFollowing}
+                    onFollowChange={(isFollowing) => {
+                      // Invalidate queries to refresh profile data and counts
+                      queryClient.invalidateQueries({ queryKey: ["/api/users", username] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/users", username, "followers"] });
+                      queryClient.invalidateQueries({ queryKey: ["/api/users", username, "following"] });
+                    }}
                   />
                 )}
               </div>
@@ -271,14 +280,22 @@ export default function Profile() {
                   <span className="font-semibold" data-testid="text-posts-count">{profile.postsCount}</span>
                   <span className="text-muted-foreground ml-1">Posts</span>
                 </div>
-                <div>
+                <button
+                  onClick={() => setFollowersDialogOpen(true)}
+                  className="hover:underline cursor-pointer"
+                  data-testid="button-followers"
+                >
                   <span className="font-semibold" data-testid="text-followers-count">{profile.followersCount}</span>
                   <span className="text-muted-foreground ml-1">Followers</span>
-                </div>
-                <div>
+                </button>
+                <button
+                  onClick={() => setFollowingDialogOpen(true)}
+                  className="hover:underline cursor-pointer"
+                  data-testid="button-following"
+                >
                   <span className="font-semibold" data-testid="text-following-count">{profile.followingCount}</span>
                   <span className="text-muted-foreground ml-1">Following</span>
-                </div>
+                </button>
               </div>
             </div>
           </CardContent>
@@ -303,6 +320,36 @@ export default function Profile() {
             />
           </TabsContent>
         </Tabs>
+        
+        <FollowersFollowingDialog
+          userId={profile.id}
+          username={profile.username}
+          open={followersDialogOpen}
+          onOpenChange={(open) => {
+            setFollowersDialogOpen(open);
+            if (open) {
+              queryClient.invalidateQueries({ queryKey: ["/api/users", username] });
+            }
+          }}
+          initialTab="followers"
+          followersCount={profile.followersCount}
+          followingCount={profile.followingCount}
+        />
+        
+        <FollowersFollowingDialog
+          userId={profile.id}
+          username={profile.username}
+          open={followingDialogOpen}
+          onOpenChange={(open) => {
+            setFollowingDialogOpen(open);
+            if (open) {
+              queryClient.invalidateQueries({ queryKey: ["/api/users", username] });
+            }
+          }}
+          initialTab="following"
+          followersCount={profile.followersCount}
+          followingCount={profile.followingCount}
+        />
       </main>
     </div>
   );

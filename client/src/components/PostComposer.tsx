@@ -60,11 +60,18 @@ export function PostComposer({ user, onSuccess }: PostComposerProps) {
 
   const createPostMutation = useMutation({
     mutationFn: async () => {
-      let finalImageUrl = imageUrl.trim() || null;
+      let finalImageUrl: string | null = null;
 
       // If there's an uploaded file, upload it first
       if (uploadedImage) {
-        finalImageUrl = await uploadImageMutation.mutateAsync(uploadedImage);
+        try {
+          finalImageUrl = await uploadImageMutation.mutateAsync(uploadedImage);
+        } catch (error) {
+          // Upload error is already handled by uploadImageMutation.onError
+          throw error;
+        }
+      } else if (imageUrl.trim()) {
+        finalImageUrl = imageUrl.trim();
       }
 
       return apiRequest("POST", "/api/posts", {
@@ -91,6 +98,7 @@ export function PostComposer({ user, onSuccess }: PostComposerProps) {
       onSuccess?.();
     },
     onError: (error: Error) => {
+      console.error("Create post error:", error);
       if (isUnauthorizedError(error)) {
         toast({
           title: "Unauthorized",
@@ -102,9 +110,11 @@ export function PostComposer({ user, onSuccess }: PostComposerProps) {
         }, 500);
         return;
       }
+      // Check if it's a validation error
+      const errorMessage = error.message || "Failed to create post";
       toast({
         title: "Error",
-        description: "Failed to create post",
+        description: errorMessage.includes("Invalid") ? errorMessage : "Failed to create post. Please check your input and try again.",
         variant: "destructive",
       });
     },

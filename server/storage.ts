@@ -332,6 +332,11 @@ export class DatabaseStorage implements IStorage {
 
   // Follow operations
   async followUser(followerId: string, followingId: string): Promise<Follow> {
+    // Check if already following to avoid duplicate key error
+    const existing = await FollowModel.findOne({ followerId, followingId });
+    if (existing) {
+      return toApiFormat(existing) as Follow;
+    }
     const follow = await FollowModel.create({ followerId, followingId });
     return toApiFormat(follow) as Follow;
   }
@@ -348,12 +353,18 @@ export class DatabaseStorage implements IStorage {
 
   async getFollowers(userId: string): Promise<User[]> {
     const follows = await FollowModel.find({ followingId: userId }).distinct("followerId");
+    if (follows.length === 0) {
+      return [];
+    }
     const users = await UserModel.find({ _id: { $in: follows } }).exec();
     return users.map(u => toApiFormat(u) as User);
   }
 
   async getFollowing(userId: string): Promise<User[]> {
     const follows = await FollowModel.find({ followerId: userId }).distinct("followingId");
+    if (follows.length === 0) {
+      return [];
+    }
     const users = await UserModel.find({ _id: { $in: follows } }).exec();
     return users.map(u => toApiFormat(u) as User);
   }
