@@ -9,7 +9,7 @@ services:
     env: node
     plan: free
     autoDeploy: true
-    buildCommand: npm install && npm run deploy:prep
+    buildCommand: npm install --include=dev && npm run deploy:prep
     startCommand: npm run start
     envVars:
       - key: NODE_ENV
