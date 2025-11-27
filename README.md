@@ -45,16 +45,19 @@ Full-stack social platform built with React + TypeScript on the frontend and Exp
 ## Deploying to Render
 
 1. Push the repo to GitHub (instructions in `DEPLOYMENT.md`).
-2. Either import `render.yaml` as a blueprint or create a Web Service manually:
-   - Build: `npm install && npm run deploy:prep`
+2. Set up MongoDB Atlas (free tier) - see `DEPLOYMENT.md` for detailed steps.
+3. Either import `render.yaml` as a blueprint or create a Web Service manually:
+   - Build: `npm install --include=dev && npm run deploy:prep`
    - Start: `npm run start`
-3. Required environment variables:
+4. Required environment variables in Render:
    ```
    NODE_ENV=production
-   DATABASE_URL=<Render MongoDB connection string>
+   DATABASE_URL=<MongoDB Atlas connection string (mongodb+srv://...)>
    SESSION_SECRET=<long random string>
    ```
-4. Render runs the bundled server (Express serves API + static client) on the provided port.
+5. Render runs the bundled server (Express serves API + static client) on the provided port.
+
+> **Note:** Render's managed databases are PostgreSQL. For MongoDB, use MongoDB Atlas (free tier available).
 
 ## Project scripts
 

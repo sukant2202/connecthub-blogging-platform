@@ -6,6 +6,15 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+// Validate DATABASE_URL format
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl.startsWith("mongodb://") && !dbUrl.startsWith("mongodb+srv://")) {
+  throw new Error(
+    `Invalid DATABASE_URL format. Expected connection string to start with "mongodb://" or "mongodb+srv://", but got: ${dbUrl.substring(0, 20)}...\n` +
+    "Please ensure you're using a MongoDB connection string (e.g., from MongoDB Atlas)."
+  );
+}
+
 let isConnected = false;
 
 export async function ensureDatabaseReady() {
@@ -14,11 +23,20 @@ export async function ensureDatabaseReady() {
   }
 
   try {
-    await mongoose.connect(process.env.DATABASE_URL!);
+    await mongoose.connect(dbUrl);
     isConnected = true;
     console.log("Connected to MongoDB");
   } catch (error) {
     console.error("Failed to connect to MongoDB:", error);
+    if (error instanceof Error && error.message.includes("Invalid scheme")) {
+      console.error(
+        "\n⚠️  DATABASE_URL validation failed. Please ensure:\n" +
+        "1. Your connection string starts with 'mongodb://' or 'mongodb+srv://'\n" +
+        "2. You're using MongoDB Atlas or another MongoDB service\n" +
+        "3. Your connection string is correctly formatted\n" +
+        "See DEPLOYMENT.md for MongoDB Atlas setup instructions."
+      );
+    }
     throw error;
   }
 }
