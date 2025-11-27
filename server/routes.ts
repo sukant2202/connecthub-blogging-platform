@@ -28,65 +28,73 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
-    const schema = z.object({
-      email: z.string().email(),
-      username: z
-        .string()
-        .min(3)
-        .max(30)
-        .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores")
-        .optional(),
-      firstName: z.string().max(50).optional(),
-      lastName: z.string().max(50).optional(),
-    });
+  const serializeSessionUser = (user: Awaited<ReturnType<typeof storage.getUser>>) => ({
+    id: user!.id,
+    email: user!.email,
+    firstName: user!.firstName,
+    lastName: user!.lastName,
+    username: user!.username,
+  });
 
+  const signupSchema = z.object({
+    email: z.string().email(),
+    username: z
+      .string()
+      .min(3)
+      .max(30)
+      .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+    firstName: z.string().max(50).optional(),
+    lastName: z.string().max(50).optional(),
+  });
+
+  app.post("/api/auth/signup", async (req, res) => {
     try {
-      const { email, username, firstName, lastName } = schema.parse(req.body);
+      const { email, username, firstName, lastName } = signupSchema.parse(req.body);
 
-      let user = await storage.getUserByEmail(email);
-
-      if (!user) {
-        if (username) {
-          const usernameOwner = await storage.getUserByUsername(username);
-          if (usernameOwner) {
-            return res.status(400).json({ message: "Username is already taken" });
-          }
-        }
-
-        user = await storage.upsertUser({
-          email,
-          username,
-          firstName,
-          lastName,
-        });
-      } else {
-        const updates: Record<string, string | null | undefined> = {};
-
-        if (username && user.username !== username) {
-          const usernameOwner = await storage.getUserByUsername(username);
-          if (usernameOwner && usernameOwner.id !== user.id) {
-            return res.status(400).json({ message: "Username is already taken" });
-          }
-          updates.username = username;
-        }
-
-        if (firstName !== undefined && user.firstName !== firstName) updates.firstName = firstName;
-        if (lastName !== undefined && user.lastName !== lastName) updates.lastName = lastName;
-
-        if (Object.keys(updates).length > 0) {
-          user = (await storage.updateUser(user.id, updates)) ?? user;
-        }
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(400).json({ message: "An account with that email already exists" });
+      }
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        return res.status(400).json({ message: "Username is already taken" });
       }
 
-      req.session.user = {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        username: user.username,
-      };
+      const user = await storage.upsertUser({
+        email,
+        username,
+        firstName,
+        lastName,
+      });
 
+      req.session.user = serializeSessionUser(user);
+      res.status(201).json(user);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      console.error("Error signing up:", error);
+      res.status(500).json({ message: "Failed to sign up" });
+    }
+  });
+
+  const loginSchema = z.object({
+    identifier: z.string().min(3).max(100),
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { identifier } = loginSchema.parse(req.body);
+      const lookupByEmail = identifier.includes("@");
+      const user = lookupByEmail
+        ? await storage.getUserByEmail(identifier)
+        : await storage.getUserByUsername(identifier);
+
+      if (!user) {
+        return res.status(404).json({ message: "Account not found. Please sign up first." });
+      }
+
+      req.session.user = serializeSessionUser(user);
       res.json(user);
     } catch (error) {
       if (error instanceof z.ZodError) {
