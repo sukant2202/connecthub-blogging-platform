@@ -30,6 +30,7 @@ const userSchema = new Schema<IUser>(
   }
 );
 
+// Create indexes (removed duplicate definitions from schema fields)
 userSchema.index({ email: 1 }, { unique: true, sparse: true });
 userSchema.index({ username: 1 }, { unique: true, sparse: true });
 
