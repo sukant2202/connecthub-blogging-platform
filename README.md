@@ -1,13 +1,13 @@
 # ConnectHub
 
-Full-stack social platform built with React + TypeScript on the frontend and Express + Drizzle/PostgreSQL on the backend. Users can sign in with email/username, create posts, follow people, like/comment, and browse the global feed.
+Full-stack social platform built with React + TypeScript on the frontend and Express + Mongoose/MongoDB on the backend. Users can sign in with email/username, create posts, follow people, like/comment, and browse the global feed.
 
 ![Landing](client/public/landing.png)
 
 ## Tech stack
 
 - **Frontend**: React 18, Vite, Tailwind CSS, shadcn/ui, TanStack Query, Wouter
-- **Backend**: Node.js 20, Express, Drizzle ORM, PostgreSQL (locally via Docker; Render in production)
+- **Backend**: Node.js 20, Express, Mongoose ODM, MongoDB (locally via Docker; Render in production)
 - **Auth**: Session-based email/username login + password hashing (bcrypt)
 - **Build**: Vite + esbuild bundling via `npm run deploy:prep`
 
@@ -20,9 +20,9 @@ Full-stack social platform built with React + TypeScript on the frontend and Exp
    npm install
    ```
 
-2. Start Postgres locally (Docker required)
+2. Start MongoDB locally (Docker required)
    ```bash
-   npm run db:up        # spins up postgres:16 on localhost:5432
+   npm run db:up        # spins up mongo:7 on localhost:27017
    ```
 
 3. Configure environment
@@ -30,17 +30,13 @@ Full-stack social platform built with React + TypeScript on the frontend and Exp
    cp env.example .env
    # edit .env with SESSION_SECRET, DATABASE_URL (defaults to local docker), PORT
    ```
-4. (If upgrading an existing DB) ensure the password column exists once:
-   ```bash
-   psql "$DATABASE_URL" -c 'ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash varchar;'
-   ```
 
-5. Run dev server
+4. Run dev server
    ```bash
    npm run dev          # Express API + Vite client on http://localhost:5000
    ```
 
-6. Tests/build
+5. Tests/build
    ```bash
    npm run check        # TypeScript check
    npm run deploy:prep  # same build Render runs (type-check + bundle)
@@ -55,7 +51,7 @@ Full-stack social platform built with React + TypeScript on the frontend and Exp
 3. Required environment variables:
    ```
    NODE_ENV=production
-   DATABASE_URL=<Render Postgres connection string>
+   DATABASE_URL=<Render MongoDB connection string>
    SESSION_SECRET=<long random string>
    ```
 4. Render runs the bundled server (Express serves API + static client) on the provided port.
@@ -67,21 +63,20 @@ Full-stack social platform built with React + TypeScript on the frontend and Exp
 | `npm run dev`       | Dev server (Express + Vite)                   |
 | `npm run check`     | TypeScript type-check                        |
 | `npm run deploy:prep` | Type-check + production build               |
-| `npm run db:up`     | Start local Postgres (Docker compose)        |
-| `npm run db:down`   | Stop local Postgres                          |
+| `npm run db:up`     | Start local MongoDB (Docker compose)        |
+| `npm run db:down`   | Stop local MongoDB                          |
 
 ## Folder structure
 
 ```
 client/          React app
 server/          Express API + auth + storage layer
-shared/          Drizzle schema shared across client/server
+shared/          Mongoose schema shared across client/server
 script/build.ts  Production bundler (Vite + esbuild)
-render.yaml      Render blueprint (web service + Postgres)
+render.yaml      Render blueprint (web service + MongoDB)
 DEPLOYMENT.md    Step-by-step guide for GitHub + Render
 ```
 
 ## License
 
 MIT © 2025 ConnectHub. Feel free to fork and customize. Contributions welcome!
-

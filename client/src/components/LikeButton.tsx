@@ -8,7 +8,7 @@ import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LikeButtonProps {
-  postId: number;
+  postId: string;
   isLiked: boolean;
   likesCount: number;
   onLikeChange?: (isLiked: boolean, likesCount: number) => void;

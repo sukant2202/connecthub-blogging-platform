@@ -4,7 +4,7 @@ This document covers the workflow for:
 
 - keeping the project in GitHub
 - running the stack locally with `.env`
-- deploying the production build to Render (web service + managed PostgreSQL)
+- deploying the production build to Render (web service + managed MongoDB)
 
 ---
 
@@ -25,9 +25,9 @@ This document covers the workflow for:
 
 ## 2. Local development
 
-1. Provision Postgres locally (Docker required):
+1. Provision MongoDB locally (Docker required):
    ```bash
-   npm run db:up      # starts postgres:16 on localhost:5432
+   npm run db:up      # starts mongo:7 on localhost:27017
    ```
    To stop it later: `npm run db:down`
 2. Copy the example environment file and edit it with your secrets (connection string already matches the local Docker defaults):
@@ -51,11 +51,7 @@ This document covers the workflow for:
    npm run deploy:prep  # check + bundle (same commands Render runs)
    ```
 
-> **Schema update note:** if you already have an existing database, add the password column once:
-> ```sql
-> ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash varchar;
-> ```
-> Local Docker users can run `psql postgres://userblog:changeme@localhost:5432/user_blog_portal -c "<above sql>"`.
+> **Note:** MongoDB will automatically create collections and indexes as needed when you first use the application. No manual schema setup is required.
 
 ---
 
@@ -68,7 +64,7 @@ You can either import the provided `render.yaml` blueprint or configure the serv
 1. Commit `render.yaml` to your repo.
 2. In the Render dashboard choose **Blueprints → New Blueprint Instance** and point it at your GitHub repo.
 3. Render will provision:
-   - `user-blog-db` (PostgreSQL, Free plan)
+   - `user-blog-db` (MongoDB, Free plan)
    - `user-blog-portal` web service (Node 20)
 4. After the first build finishes, open the service and set the remaining secrets (Settings → Environment):
    - `SESSION_SECRET`
@@ -77,7 +73,7 @@ You can either import the provided `render.yaml` blueprint or configure the serv
 
 ### Option B — Manual setup
 
-1. Create a PostgreSQL instance in Render (or use Neon/Railway/etc.) and copy its connection string.
+1. Create a MongoDB instance in Render (or use MongoDB Atlas/etc.) and copy its connection string.
 2. Create a **Web Service**:
    - Deploy from your GitHub repo
    - Build command: `npm install && npm run deploy:prep`
@@ -87,7 +83,7 @@ You can either import the provided `render.yaml` blueprint or configure the serv
    |----------------|-------------------------------------------------------------|
    | `NODE_ENV`     | `production`                                                |
    | `PORT`         | leave empty (Render injects it automatically)               |
-   | `DATABASE_URL` | database connection string                                  |
+   | `DATABASE_URL` | MongoDB connection string (mongodb://...)                    |
    | `SESSION_SECRET` | long random string                                        |
 4. Click **Deploy**. Render will run `npm run deploy:prep` (type-check + bundle) followed by `npm run start` which serves both the API and the static client.
 
@@ -95,6 +91,6 @@ You can either import the provided `render.yaml` blueprint or configure the serv
 
 ## 4. Keeping configuration in sync
 
-- Update `.env` locally whenever you add/remove environment variables and mirror them in Render’s dashboard.
+- Update `.env` locally whenever you add/remove environment variables and mirror them in Render's dashboard.
 - `npm run deploy:prep` is the single source of truth for production builds (also used inside the Render service and the included `Procfile`).
 - `render.yaml` can be adjusted (plan sizes, service names, etc.) and will act as IaC for future environments.

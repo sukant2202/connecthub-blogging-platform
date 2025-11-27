@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { UserAvatar } from "./UserAvatar";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Image, Loader2, X } from "lucide-react";
+import { Image, Loader2, X, Upload } from "lucide-react";
 import type { User } from "@shared/schema";
 
 interface PostComposerProps {
@@ -19,24 +19,69 @@ interface PostComposerProps {
 export function PostComposer({ user, onSuccess }: PostComposerProps) {
   const [content, setContent] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [uploadedImage, setUploadedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [showImageInput, setShowImageInput] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"url" | "file">("url");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const MAX_CHARS = 500;
   const remainingChars = MAX_CHARS - content.length;
 
+  const uploadImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("image", file);
+      
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to upload image");
+      }
+
+      const data = await response.json();
+      return data.imageUrl;
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload image",
+        variant: "destructive",
+      });
+    },
+  });
+
   const createPostMutation = useMutation({
     mutationFn: async () => {
+      let finalImageUrl = imageUrl.trim() || null;
+
+      // If there's an uploaded file, upload it first
+      if (uploadedImage) {
+        finalImageUrl = await uploadImageMutation.mutateAsync(uploadedImage);
+      }
+
       return apiRequest("POST", "/api/posts", {
         content: content.trim(),
-        imageUrl: imageUrl.trim() || null,
+        imageUrl: finalImageUrl,
       });
     },
     onSuccess: () => {
       setContent("");
       setImageUrl("");
+      setUploadedImage(null);
+      setImagePreview(null);
       setShowImageInput(false);
+      setUploadMode("url");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/posts/feed"] });
       toast({
@@ -65,6 +110,53 @@ export function PostComposer({ user, onSuccess }: PostComposerProps) {
     },
   });
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+      if (!validTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please select a JPEG, PNG, GIF, or WebP image",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate file size (5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please select an image smaller than 5MB",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUploadedImage(file);
+      setImageUrl(""); // Clear URL input if file is selected
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageUrl("");
+    setUploadedImage(null);
+    setImagePreview(null);
+    setShowImageInput(false);
+    setUploadMode("url");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (content.trim() && content.length <= MAX_CHARS) {
@@ -89,34 +181,98 @@ export function PostComposer({ user, onSuccess }: PostComposerProps) {
               />
               
               {showImageInput && (
-                <div className="flex gap-2 items-center">
-                  <Input
-                    type="url"
-                    placeholder="Enter image URL..."
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    className="flex-1"
-                    data-testid="input-image-url"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setImageUrl("");
-                      setShowImageInput(false);
-                    }}
-                    data-testid="button-remove-image"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                <div className="space-y-2">
+                  {/* Toggle between URL and file upload */}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={uploadMode === "url" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setUploadMode("url");
+                        setUploadedImage(null);
+                        setImagePreview(null);
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = "";
+                        }
+                      }}
+                    >
+                      Image URL
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={uploadMode === "file" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setUploadMode("file");
+                        setImageUrl("");
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload from Device
+                    </Button>
+                  </div>
+
+                  {uploadMode === "url" && (
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        type="url"
+                        placeholder="Enter image URL..."
+                        value={imageUrl}
+                        onChange={(e) => {
+                          setImageUrl(e.target.value);
+                          setUploadedImage(null);
+                          setImagePreview(null);
+                        }}
+                        className="flex-1"
+                        data-testid="input-image-url"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleRemoveImage}
+                        data-testid="button-remove-image"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {uploadMode === "file" && (
+                    <div className="space-y-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        data-testid="input-image-file"
+                      />
+                      {uploadedImage && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span>{uploadedImage.name}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleRemoveImage}
+                            className="h-6 w-6"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               
-              {imageUrl && (
+              {(imageUrl || imagePreview) && (
                 <div className="rounded-lg overflow-hidden border max-h-48">
                   <img
-                    src={imageUrl}
+                    src={imagePreview || imageUrl}
                     alt="Preview"
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -146,10 +302,10 @@ export function PostComposer({ user, onSuccess }: PostComposerProps) {
                   </span>
                   <Button
                     type="submit"
-                    disabled={!content.trim() || content.length > MAX_CHARS || createPostMutation.isPending}
+                    disabled={!content.trim() || content.length > MAX_CHARS || createPostMutation.isPending || uploadImageMutation.isPending}
                     data-testid="button-create-post"
                   >
-                    {createPostMutation.isPending ? (
+                    {createPostMutation.isPending || uploadImageMutation.isPending ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Posting...

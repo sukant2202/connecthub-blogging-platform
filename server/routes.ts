@@ -2,6 +2,7 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
+import { upload, getUploadUrl } from "./upload";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 
@@ -229,7 +230,7 @@ export async function registerRoutes(
       }
       
       // Build update object, preserving empty strings to allow clearing fields
-      const updateData: { username?: string; bio?: string | null; profileImageUrl?: string | null } = {};
+      const updateData: { username?: string; bio?: string; profileImageUrl?: string } = {};
       
       if (username !== undefined) {
         updateData.username = username;
@@ -237,12 +238,12 @@ export async function registerRoutes(
       
       // Allow clearing bio by sending empty string (convert to null for DB)
       if (bio !== undefined) {
-        updateData.bio = bio === "" ? null : bio;
+        updateData.bio = bio === "" ? undefined : bio;
       }
       
       // Allow clearing profileImageUrl by sending empty string (convert to null for DB)
       if (profileImageUrl !== undefined) {
-        updateData.profileImageUrl = profileImageUrl === "" ? null : profileImageUrl;
+        updateData.profileImageUrl = profileImageUrl === "" ? undefined : profileImageUrl;
       }
       
       const updatedUser = await storage.updateUser(userId, updateData);
@@ -270,7 +271,7 @@ export async function registerRoutes(
       const follow = await storage.followUser(followerId, followingId);
       res.json(follow);
     } catch (error: any) {
-      if (error.code === '23505') {
+      if (error.code === 11000) {
         return res.status(400).json({ message: "Already following this user" });
       }
       console.error("Error following user:", error);
@@ -292,6 +293,21 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error unfollowing user:", error);
       res.status(500).json({ message: "Failed to unfollow user" });
+    }
+  });
+
+  // Image upload route
+  app.post('/api/upload', isAuthenticated, upload.single('image'), (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+      const imageUrl = getUploadUrl(req.file.filename);
+      res.json({ imageUrl });
+    } catch (error: any) {
+      console.error("Error uploading image:", error);
+      const message = error.message || "Failed to upload image";
+      res.status(error.statusCode || 500).json({ message });
     }
   });
 
@@ -346,7 +362,7 @@ export async function registerRoutes(
 
   app.get('/api/posts/:id', async (req, res) => {
     try {
-      const postId = parseInt(req.params.id);
+      const postId = req.params.id;
       const currentUserId = req.session?.user?.id;
       
       const post = await storage.getPost(postId, currentUserId);
@@ -364,7 +380,7 @@ export async function registerRoutes(
   app.put('/api/posts/:id', isAuthenticated, async (req, res) => {
     try {
       const userId = req.session!.user!.id;
-      const postId = parseInt(req.params.id);
+      const postId = req.params.id;
       const schema = z.object({
         content: z.string().min(1).max(500),
         imageUrl: z.string().url().nullable().optional(),
@@ -390,7 +406,7 @@ export async function registerRoutes(
   app.delete('/api/posts/:id', isAuthenticated, async (req, res) => {
     try {
       const userId = req.session!.user!.id;
-      const postId = parseInt(req.params.id);
+      const postId = req.params.id;
       
       const success = await storage.deletePost(postId, userId);
       if (!success) {
@@ -408,12 +424,12 @@ export async function registerRoutes(
   app.post('/api/posts/:id/like', isAuthenticated, async (req, res) => {
     try {
       const userId = req.session!.user!.id;
-      const postId = parseInt(req.params.id);
+      const postId = req.params.id;
       
       const like = await storage.likePost(userId, postId);
       res.json(like);
     } catch (error: any) {
-      if (error.code === '23505') {
+      if (error.code === 11000) {
         return res.status(400).json({ message: "Already liked this post" });
       }
       console.error("Error liking post:", error);
@@ -424,7 +440,7 @@ export async function registerRoutes(
   app.delete('/api/posts/:id/like', isAuthenticated, async (req, res) => {
     try {
       const userId = req.session!.user!.id;
-      const postId = parseInt(req.params.id);
+      const postId = req.params.id;
       
       const success = await storage.unlikePost(userId, postId);
       if (!success) {
@@ -442,7 +458,7 @@ export async function registerRoutes(
   app.post('/api/posts/:id/comments', isAuthenticated, async (req, res) => {
     try {
       const userId = req.session!.user!.id;
-      const postId = parseInt(req.params.id);
+      const postId = req.params.id;
       const schema = z.object({
         content: z.string().min(1).max(500),
       });
@@ -461,7 +477,7 @@ export async function registerRoutes(
 
   app.get('/api/posts/:id/comments', async (req, res) => {
     try {
-      const postId = parseInt(req.params.id);
+      const postId = req.params.id;
       const comments = await storage.getComments(postId);
       res.json(comments);
     } catch (error) {
@@ -473,7 +489,7 @@ export async function registerRoutes(
   app.delete('/api/comments/:id', isAuthenticated, async (req, res) => {
     try {
       const userId = req.session!.user!.id;
-      const commentId = parseInt(req.params.id);
+      const commentId = req.params.id;
       
       const success = await storage.deleteComment(commentId, userId);
       if (!success) {

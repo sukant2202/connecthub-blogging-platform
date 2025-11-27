@@ -25,7 +25,7 @@ export default function PostDetails() {
   });
 
   const deletePostMutation = useMutation({
-    mutationFn: async (postId: number) => {
+    mutationFn: async (postId: string) => {
       return apiRequest("DELETE", `/api/posts/${postId}`);
     },
     onSuccess: () => {

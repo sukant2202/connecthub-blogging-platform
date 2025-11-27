@@ -1,189 +1,218 @@
-import { sql, relations } from "drizzle-orm";
-import {
-  index,
-  integer,
-  jsonb,
-  pgTable,
-  primaryKey,
-  serial,
-  text,
-  timestamp,
-  unique,
-  varchar,
-} from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import mongoose, { Schema, Document, type Types } from "mongoose";
 import { z } from "zod";
 
-// Session storage table - Required for Replit Auth
-export const sessions = pgTable(
-  "sessions",
+// User Schema
+export interface IUser extends Document {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  username?: string;
+  passwordHash?: string;
+  bio?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const userSchema = new Schema<IUser>(
   {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
+    email: { type: String, sparse: true },
+    firstName: String,
+    lastName: String,
+    profileImageUrl: String,
+    username: { type: String, sparse: true },
+    passwordHash: String,
+    bio: String,
   },
-  (table) => [index("IDX_session_expire").on(table.expire)]
+  {
+    timestamps: true,
+    _id: true,
+  }
 );
 
-// Users table - Extended for social media features
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
-  profileImageUrl: varchar("profile_image_url"),
-  username: varchar("username").unique(),
-  passwordHash: varchar("password_hash"),
-  bio: text("bio"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+userSchema.index({ email: 1 }, { unique: true, sparse: true });
+userSchema.index({ username: 1 }, { unique: true, sparse: true });
+
+export const User = mongoose.model<IUser>("User", userSchema);
+
+// Post Schema
+export interface IPost extends Document {
+  userId: string;
+  content: string;
+  imageUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const postSchema = new Schema<IPost>(
+  {
+    userId: { type: String, required: true, ref: "User" },
+    content: { type: String, required: true },
+    imageUrl: String,
+  },
+  {
+    timestamps: true,
+  }
+);
+
+postSchema.index({ userId: 1 });
+postSchema.index({ createdAt: -1 });
+
+export const Post = mongoose.model<IPost>("Post", postSchema);
+
+// Follow Schema
+export interface IFollow extends Document {
+  followerId: string;
+  followingId: string;
+  createdAt: Date;
+}
+
+const followSchema = new Schema<IFollow>(
+  {
+    followerId: { type: String, required: true, ref: "User" },
+    followingId: { type: String, required: true, ref: "User" },
+  },
+  {
+    timestamps: { createdAt: true, updatedAt: false },
+  }
+);
+
+followSchema.index({ followerId: 1 });
+followSchema.index({ followingId: 1 });
+followSchema.index({ followerId: 1, followingId: 1 }, { unique: true });
+
+export const Follow = mongoose.model<IFollow>("Follow", followSchema);
+
+// Like Schema
+export interface ILike extends Document {
+  userId: string;
+  postId: string;
+  createdAt: Date;
+}
+
+const likeSchema = new Schema<ILike>(
+  {
+    userId: { type: String, required: true, ref: "User" },
+    postId: { type: String, required: true, ref: "Post" },
+  },
+  {
+    timestamps: { createdAt: true, updatedAt: false },
+  }
+);
+
+likeSchema.index({ postId: 1 });
+likeSchema.index({ userId: 1 });
+likeSchema.index({ userId: 1, postId: 1 }, { unique: true });
+
+export const Like = mongoose.model<ILike>("Like", likeSchema);
+
+// Comment Schema
+export interface IComment extends Document {
+  userId: string;
+  postId: string;
+  content: string;
+  createdAt: Date;
+}
+
+const commentSchema = new Schema<IComment>(
+  {
+    userId: { type: String, required: true, ref: "User" },
+    postId: { type: String, required: true, ref: "Post" },
+    content: { type: String, required: true },
+  },
+  {
+    timestamps: { createdAt: true, updatedAt: false },
+  }
+);
+
+commentSchema.index({ postId: 1 });
+commentSchema.index({ userId: 1 });
+
+export const Comment = mongoose.model<IComment>("Comment", commentSchema);
+
+// Zod schemas for validation
+export const insertUserSchema = z.object({
+  email: z.string().email().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  profileImageUrl: z.string().url().optional().or(z.literal("")),
+  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/).optional(),
+  bio: z.string().max(300).optional(),
+  passwordHash: z.string().optional(),
 });
 
-// Posts table
-export const posts = pgTable("posts", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  content: text("content").notNull(),
-  imageUrl: varchar("image_url"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [
-  index("IDX_posts_user_id").on(table.userId),
-  index("IDX_posts_created_at").on(table.createdAt),
-]);
-
-// Follows table
-export const follows = pgTable("follows", {
-  id: serial("id").primaryKey(),
-  followerId: varchar("follower_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  followingId: varchar("following_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  unique("unique_follow").on(table.followerId, table.followingId),
-  index("IDX_follows_follower").on(table.followerId),
-  index("IDX_follows_following").on(table.followingId),
-]);
-
-// Likes table
-export const likes = pgTable("likes", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  postId: integer("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  unique("unique_like").on(table.userId, table.postId),
-  index("IDX_likes_post").on(table.postId),
-  index("IDX_likes_user").on(table.userId),
-]);
-
-// Comments table
-export const comments = pgTable("comments", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  postId: integer("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [
-  index("IDX_comments_post").on(table.postId),
-  index("IDX_comments_user").on(table.userId),
-]);
-
-// Relations
-export const usersRelations = relations(users, ({ many }) => ({
-  posts: many(posts),
-  likes: many(likes),
-  comments: many(comments),
-  followers: many(follows, { relationName: "following" }),
-  following: many(follows, { relationName: "follower" }),
-}));
-
-export const postsRelations = relations(posts, ({ one, many }) => ({
-  author: one(users, {
-    fields: [posts.userId],
-    references: [users.id],
-  }),
-  likes: many(likes),
-  comments: many(comments),
-}));
-
-export const followsRelations = relations(follows, ({ one }) => ({
-  follower: one(users, {
-    fields: [follows.followerId],
-    references: [users.id],
-    relationName: "follower",
-  }),
-  following: one(users, {
-    fields: [follows.followingId],
-    references: [users.id],
-    relationName: "following",
-  }),
-}));
-
-export const likesRelations = relations(likes, ({ one }) => ({
-  user: one(users, {
-    fields: [likes.userId],
-    references: [users.id],
-  }),
-  post: one(posts, {
-    fields: [likes.postId],
-    references: [posts.id],
-  }),
-}));
-
-export const commentsRelations = relations(comments, ({ one }) => ({
-  user: one(users, {
-    fields: [comments.userId],
-    references: [users.id],
-  }),
-  post: one(posts, {
-    fields: [comments.postId],
-    references: [posts.id],
-  }),
-}));
-
-// Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+export const insertPostSchema = z.object({
+  userId: z.string(),
+  content: z.string().min(1).max(500),
+  imageUrl: z.string().url().nullable().optional(),
 });
 
-export const insertPostSchema = createInsertSchema(posts).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+export const insertFollowSchema = z.object({
+  followerId: z.string(),
+  followingId: z.string(),
 });
 
-export const insertFollowSchema = createInsertSchema(follows).omit({
-  id: true,
-  createdAt: true,
+export const insertLikeSchema = z.object({
+  userId: z.string(),
+  postId: z.string(),
 });
 
-export const insertLikeSchema = createInsertSchema(likes).omit({
-  id: true,
-  createdAt: true,
+export const insertCommentSchema = z.object({
+  userId: z.string(),
+  postId: z.string(),
+  content: z.string().min(1).max(500),
 });
 
-export const insertCommentSchema = createInsertSchema(comments).omit({
-  id: true,
-  createdAt: true,
-});
+// Types - Plain object versions for API responses (without Mongoose Document methods)
+export type User = {
+  id: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
+  username?: string;
+  passwordHash?: string;
+  bio?: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
-// Types
-export type UpsertUser = typeof users.$inferInsert;
-export type User = typeof users.$inferSelect;
+export type Post = {
+  id: string;
+  userId: string;
+  content: string;
+  imageUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type Follow = {
+  id: string;
+  followerId: string;
+  followingId: string;
+  createdAt: Date;
+};
+
+export type Like = {
+  id: string;
+  userId: string;
+  postId: string;
+  createdAt: Date;
+};
+
+export type Comment = {
+  id: string;
+  userId: string;
+  postId: string;
+  content: string;
+  createdAt: Date;
+};
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
-
-export type Post = typeof posts.$inferSelect;
+export type UpsertUser = InsertUser & { _id?: string };
 export type InsertPost = z.infer<typeof insertPostSchema>;
-
-export type Follow = typeof follows.$inferSelect;
 export type InsertFollow = z.infer<typeof insertFollowSchema>;
-
-export type Like = typeof likes.$inferSelect;
 export type InsertLike = z.infer<typeof insertLikeSchema>;
-
-export type Comment = typeof comments.$inferSelect;
 export type InsertComment = z.infer<typeof insertCommentSchema>;
 
 // Extended types for frontend

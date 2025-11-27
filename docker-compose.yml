@@ -2,17 +2,14 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:16
+    image: mongo:7
     restart: unless-stopped
     environment:
-      POSTGRES_DB: user_blog_portal
-      POSTGRES_USER: userblog
-      POSTGRES_PASSWORD: changeme
+      MONGO_INITDB_DATABASE: user_blog_portal
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mongodata:/data/db
 
 volumes:
-  pgdata:
-
+  mongodata:

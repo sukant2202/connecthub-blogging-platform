@@ -4,5 +4,6 @@ dist
 .env
 .local
 server/public
+server/public/uploads
 vite.config.ts.*
 *.tar.gz

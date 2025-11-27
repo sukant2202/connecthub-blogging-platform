@@ -16,8 +16,8 @@ import type { PostWithAuthor } from "@shared/schema";
 interface PostCardProps {
   post: PostWithAuthor;
   currentUserId?: string;
-  onDelete?: (postId: number) => void;
-  onEdit?: (postId: number) => void;
+  onDelete?: (postId: string) => void;
+  onEdit?: (postId: string) => void;
   showFullContent?: boolean;
 }
 

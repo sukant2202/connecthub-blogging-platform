@@ -20,7 +20,7 @@ export function PostFeed({ posts, isLoading, currentUserId, emptyMessage = "No p
   const { toast } = useToast();
 
   const deletePostMutation = useMutation({
-    mutationFn: async (postId: number) => {
+    mutationFn: async (postId: string) => {
       return apiRequest("DELETE", `/api/posts/${postId}`);
     },
     onSuccess: () => {

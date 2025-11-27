@@ -14,7 +14,7 @@ import { Link } from "wouter";
 import type { CommentWithAuthor } from "@shared/schema";
 
 interface CommentSectionProps {
-  postId: number;
+  postId: string;
   currentUserId?: string;
 }
 
@@ -61,7 +61,7 @@ export function CommentSection({ postId, currentUserId }: CommentSectionProps) {
   });
 
   const deleteCommentMutation = useMutation({
-    mutationFn: async (commentId: number) => {
+    mutationFn: async (commentId: string) => {
       return apiRequest("DELETE", `/api/comments/${commentId}`);
     },
     onSuccess: () => {

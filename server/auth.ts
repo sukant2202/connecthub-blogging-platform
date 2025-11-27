@@ -1,14 +1,15 @@
 import session from "express-session";
-import connectPg from "connect-pg-simple";
+import MongoStore from "connect-mongo";
 import type { Express, RequestHandler } from "express";
-import { pool } from "./db";
-
-const PgStore = connectPg(session);
 
 export function setupAuth(app: Express) {
   const secret = process.env.SESSION_SECRET;
   if (!secret) {
     throw new Error("SESSION_SECRET must be set");
+  }
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL must be set");
   }
 
   app.set("trust proxy", 1);
@@ -17,10 +18,9 @@ export function setupAuth(app: Express) {
       secret,
       resave: false,
       saveUninitialized: false,
-      store: new PgStore({
-        pool,
-        tableName: "sessions",
-        createTableIfMissing: true,
+      store: MongoStore.create({
+        mongoUrl: process.env.DATABASE_URL,
+        collectionName: "sessions",
       }),
       cookie: {
         httpOnly: true,
@@ -38,4 +38,3 @@ export const isAuthenticated: RequestHandler = (req, res, next) => {
   }
   res.status(401).json({ message: "Unauthorized" });
 };
-

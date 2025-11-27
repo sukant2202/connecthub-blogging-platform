@@ -1,4 +1,4 @@
-import { type Express } from "express";
+import express, { type Express } from "express";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
@@ -28,6 +28,12 @@ export async function setupVite(server: Server, app: Express) {
     server: serverOptions,
     appType: "custom",
   });
+
+  // Serve uploaded files in development
+  const uploadsPath = path.resolve(import.meta.dirname, "public", "uploads");
+  if (fs.existsSync(uploadsPath)) {
+    app.use("/uploads", express.static(uploadsPath));
+  }
 
   app.use(vite.middlewares);
 
